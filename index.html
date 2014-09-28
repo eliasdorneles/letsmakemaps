@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<style>
+    body {
+        font-family: Arial;
+    }
+    .subunit.BRA { fill: #cdc; }
+    .subunit.ENG { fill: #dcc; }
+    .subunit.NIR { fill: #ddc; }
+    .subunit.SCT { fill: #dcd; }
+    .subunit.WLS { fill: #cdd; }
+    .subunit.IRL { display: none; }
+</style>
+<body>
+    <label>
+        <input type="radio" name="country_name" value="brasil"> Brazil
+    </label>
+    <label>
+        <input type="radio" name="country_name" value="uk" checked> UK
+    </label>
+    <script src="d3.v3.min.js"></script>
+    <script src="topojson.v1.min.js"></script>
+    <script>
+        var width = 900;
+        var height = 800;
+
+        var svg = d3.select('body').append('svg');
+        svg.attr('width', width).attr('height', height);
+
+        var available_configs = {
+            brasil: {
+                subunitsProperty: 'subunits-brasil',
+                url: 'data/brasil.json',
+                center: [-51, -15],
+                scale: 800
+            },
+            uk: {
+                subunitsProperty: 'subunits-uk',
+                url: 'data/uk.json',
+                center: [0, 55],
+                scale: 2000
+            }
+        }
+
+        function showMap(config) {
+            d3.json(config.url, function(error, data){
+                if (error) return console.error(error);
+
+                svg.selectAll("*").remove();
+                console.log("data", data);
+
+                var subunits = topojson.feature(data, data.objects[config.subunitsProperty]);
+
+                var projection = d3.geo.mercator()
+                .center(config.center).scale(config.scale).translate([width/2, height/2]);
+
+                var path = d3.geo.path().projection(projection);
+
+                svg.selectAll(".subunit")
+                .data(subunits.features)
+                .enter()
+                .append("path")
+                .attr('class', function(d) { return "subunit " + d.id; })
+                .attr('d', path);
+            });
+        }
+
+        function updateMap(){
+            var selected = document.querySelector("input[name=country_name]:checked");
+            if (selected) {
+                showMap(available_configs[selected.value]);
+            }
+        }
+
+        d3.selectAll("input[name=country_name]").on('change', updateMap);
+        updateMap();
+    </script>
+</body>
+</html>
