@@ -4,20 +4,51 @@
     body {
         font-family: Arial;
     }
+    .subunit { fill: #eee; }
     .subunit.BRA { fill: #cdc; }
     .subunit.ENG { fill: #dcc; }
     .subunit.NIR { fill: #ddc; }
     .subunit.SCT { fill: #dcd; }
     .subunit.WLS { fill: #cdd; }
-    .subunit.IRL { display: none; }
+    .subunit-boundary {
+        fill: none;
+        stroke: #999;
+        stroke-dasharray: 2, 2;
+        stroke-linejoin: round;
+    }
+    .subunit-label {
+        fill: #777;
+        font-size: 16px;
+        fill-opacity: .5;
+        text-anchor: middle;
+    }
+    .place {
+        fill: #999;
+    }
+    .place.country-capital {
+        fill: #c55;
+        scale: 10;
+    }
+    .place.dept-capital {
+        fill: #55c;
+        scale: 10;
+    }
+    .place-label {
+        font-size: 13px;
+        fill: #111;
+        font-weight: bold;
+        fill-opacity: .5;
+    }
 </style>
 <body>
+    <h1>Let's make some maps!</h1>
     <label>
         <input type="radio" name="country_name" value="brasil"> Brazil
     </label>
     <label>
         <input type="radio" name="country_name" value="uk" checked> UK
     </label>
+
     <script src="d3.v3.min.js"></script>
     <script src="topojson.v1.min.js"></script>
     <script>
@@ -29,16 +60,22 @@
 
         var available_configs = {
             brasil: {
+                show: ["BRA"],
+                hide: ['URY', 'ARG', 'PRY', 'VEN', 'COL', 'BOL'],
                 subunitsProperty: 'subunits-brasil',
+                placesProperty: 'places-brasil',
                 url: 'data/brasil.json',
                 center: [-51, -15],
-                scale: 800
+                scale: 800,
             },
             uk: {
+                show: ['ENG', 'NIR', 'SCT', 'WLS'],
+                hide: ['IRL'],
                 subunitsProperty: 'subunits-uk',
+                placesProperty: 'places-uk',
                 url: 'data/uk.json',
                 center: [0, 55],
-                scale: 2000
+                scale: 2000,
             }
         }
 
@@ -49,19 +86,87 @@
                 svg.selectAll("*").remove();
                 console.log("data", data);
 
-                var subunits = topojson.feature(data, data.objects[config.subunitsProperty]);
+                var data_subunits = data.objects[config.subunitsProperty];
+                var subunits = topojson.feature(data, data_subunits);
+                var places = topojson.feature(data, data.objects[config.placesProperty]);
 
                 var projection = d3.geo.mercator()
                 .center(config.center).scale(config.scale).translate([width/2, height/2]);
 
                 var path = d3.geo.path().projection(projection);
 
+                // draw country area paths
+                path.pointRadius(2);
                 svg.selectAll(".subunit")
                 .data(subunits.features)
                 .enter()
                 .append("path")
                 .attr('class', function(d) { return "subunit " + d.id; })
                 .attr('d', path);
+
+                svg.selectAll(".subunit-label")
+                .data(subunits.features)
+                .enter()
+                .append('text')
+                .attr('class', function(d) { return 'subunit-label ' + d.id; })
+                .attr('transform', function(d) {
+                    return "translate(" + path.centroid(d) + ")";
+                })
+                .text(function(d) { return d.properties.name; });
+
+                // add interior and exterior boundaries
+                var addBoundaries = function(boundary_type, filter){
+                    svg.append("path")
+                    .datum(topojson.mesh(data, data_subunits, filter))
+                    .attr("d", path)
+                    .attr("class", "subunit-boundary " + boundary_type);
+                };
+                addBoundaries("exterior", function(a, b) {
+                    return config.hide.indexOf(a.id) >= 0 || a !== b;
+                });
+                addBoundaries("interior", function(a, b) {
+                    return config.show.indexOf(a.id) < 0;
+                });
+
+                // add places
+                svg.selectAll('.place').data(places.features)
+                .enter()
+                .append('circle')
+                .attr('transform', function(d) {
+                    return "translate(" + projection(d.geometry.coordinates) + ")";
+                })
+                .attr('r', function(d) {
+                    if ('Admin-0 capital' == d.properties.category) {
+                        return 5;
+                    } else if ('Admin-1 capital' == d.properties.category) {
+                        return 3;
+                    }
+                    return 2;
+                })
+                .attr('class', function(d) {
+                    var classes = "place";
+                    if ('Admin-0 capital' == d.properties.category) {
+                        classes += " country-capital";
+                    } else if ('Admin-1 capital' == d.properties.category) {
+                        classes += " dept-capital";
+                    }
+                    return classes;
+                });
+
+                svg.selectAll('.place-label').data(places.features)
+                .enter()
+                .append('text')
+                .filter(function(d) {
+                    return 'Admin' == d.properties.category.substring(0, 5);
+                })
+                .attr('class', 'place-label')
+                .attr('transform', function(d) {
+                    return "translate(" + projection(d.geometry.coordinates) + ")";
+                })
+                .text(function(d) { return d.properties.name; })
+                .attr('dy', '.35em')
+                .style('text-anchor', function(d) { return d.geometry.coordinates[0] > config.center[0] ? 'start' : 'end' })
+                .attr('x', function(d) { return d.geometry.coordinates[0] > config.center[0] ? 6 : -6; })
             });
         }
 
